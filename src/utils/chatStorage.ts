@@ -25,8 +25,10 @@ export const saveChatData = (messages: ChatMessage[]): void => {
     const jsonString = JSON.stringify(chatData, null, 2);
     localStorage.setItem(STORAGE_KEY, jsonString);
     
-    // Also log to console for debugging
-    console.log('Chat data saved:', chatData);
+    // Debug logging
+    console.log('Chat data saved to localStorage:', chatData);
+    console.log('localStorage key:', STORAGE_KEY);
+    console.log('Current localStorage contents:', localStorage.getItem(STORAGE_KEY));
   } catch (error) {
     console.error('Failed to save chat data:', error);
   }
@@ -34,12 +36,19 @@ export const saveChatData = (messages: ChatMessage[]): void => {
 
 export const loadChatData = (): ChatMessage[] => {
   try {
+    console.log('Loading chat data from localStorage...');
+    console.log('Storage key:', STORAGE_KEY);
+    
     const stored = localStorage.getItem(STORAGE_KEY);
+    console.log('Raw stored data:', stored);
+    
     if (!stored) {
+      console.log('No stored data found, returning empty array');
       return [];
     }
     
     const chatData: ChatData = JSON.parse(stored);
+    console.log('Parsed chat data:', chatData);
     
     // Validate data structure
     if (!chatData.messages || !Array.isArray(chatData.messages)) {
@@ -47,7 +56,7 @@ export const loadChatData = (): ChatMessage[] => {
       return [];
     }
     
-    console.log('Chat data loaded:', chatData);
+    console.log('Successfully loaded messages:', chatData.messages);
     return chatData.messages;
   } catch (error) {
     console.error('Failed to load chat data:', error);
@@ -71,8 +80,20 @@ export const clearChatData = (): void => {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem('chatMessages'); // Remove old storage key if exists
     localStorage.removeItem('chatUsername');
-    console.log('Chat data cleared');
+    console.log('Chat data cleared from localStorage');
+    console.log('Remaining localStorage keys:', Object.keys(localStorage));
   } catch (error) {
     console.error('Failed to clear chat data:', error);
   }
+};
+
+// Debug function to check localStorage status
+export const debugLocalStorage = (): void => {
+  console.log('=== localStorage Debug Info ===');
+  console.log('Storage key being used:', STORAGE_KEY);
+  console.log('localStorage available:', typeof(Storage) !== "undefined");
+  console.log('Current localStorage length:', localStorage.length);
+  console.log('All localStorage keys:', Object.keys(localStorage));
+  console.log('Our data:', localStorage.getItem(STORAGE_KEY));
+  console.log('==============================');
 };

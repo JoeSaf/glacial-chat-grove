@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Users, Shield, AlertTriangle, Ban, Download, Trash2 } from 'lucide-react';
-import { saveChatData, loadChatData, exportChatAsJSON, clearChatData, ChatMessage } from '../utils/chatStorage';
+import { saveChatData, loadChatData, exportChatAsJSON, clearChatData, debugLocalStorage, ChatMessage } from '../utils/chatStorage';
 
 type SafetyStatus = 'safe' | 'suspicious' | 'spam';
 
@@ -13,10 +13,14 @@ const ChatInterface = () => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load messages using the new JSON storage utility
+    // Debug localStorage on component mount
+    debugLocalStorage();
+    
+    // Load messages using the JSON storage utility
     const savedMessages = loadChatData();
     const savedUsername = localStorage.getItem('chatUsername');
     
+    console.log('Component mounted, loaded messages:', savedMessages);
     setMessages(savedMessages);
     
     if (savedUsername) {
@@ -26,7 +30,8 @@ const ChatInterface = () => {
   }, []);
 
   useEffect(() => {
-    // Save messages using the new JSON storage utility
+    // Save messages using the JSON storage utility
+    console.log('Messages state changed, saving to localStorage:', messages);
     if (messages.length > 0) {
       saveChatData(messages);
     }
@@ -46,6 +51,7 @@ const ChatInterface = () => {
     if (username.trim()) {
       setIsUsernameSet(true);
       localStorage.setItem('chatUsername', username);
+      console.log('Username set and saved:', username);
     }
   };
 
@@ -94,7 +100,12 @@ const ChatInterface = () => {
         message: currentMessage.trim()
       };
 
-      setMessages(prev => [...prev, newMessage]);
+      console.log('Adding new message:', newMessage);
+      setMessages(prev => {
+        const updated = [...prev, newMessage];
+        console.log('Updated messages array:', updated);
+        return updated;
+      });
       setCurrentMessage('');
     }
   };
