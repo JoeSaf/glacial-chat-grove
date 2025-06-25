@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Users, Shield, AlertTriangle, Ban, Download, Trash2 } from 'lucide-react';
+import { Send, Users, Shield, AlertTriangle, Ban, Download, Trash2, FolderOpen } from 'lucide-react';
 import { saveChatData, loadChatData, exportChatAsJSON, clearChatData, debugLocalStorage, ChatMessage } from '../utils/chatStorage';
+import { saveMessageToFile, exportFileStructure, clearMessageFiles, debugFileStructure } from '../utils/fileStorage';
 
 type SafetyStatus = 'safe' | 'suspicious' | 'spam';
 
@@ -13,8 +14,9 @@ const ChatInterface = () => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Debug localStorage on component mount
+    // Debug both localStorage and file structure on component mount
     debugLocalStorage();
+    debugFileStructure();
     
     // Load messages using the JSON storage utility
     const savedMessages = loadChatData();
@@ -101,6 +103,10 @@ const ChatInterface = () => {
       };
 
       console.log('Adding new message:', newMessage);
+      
+      // Save to file system in real-time
+      saveMessageToFile(newMessage);
+      
       setMessages(prev => {
         const updated = [...prev, newMessage];
         console.log('Updated messages array:', updated);
@@ -127,9 +133,28 @@ const ChatInterface = () => {
     }
   };
 
+  const handleExportFileStructure = () => {
+    try {
+      const fileStructure = exportFileStructure();
+      const jsonData = JSON.stringify(fileStructure, null, 2);
+      const blob = new Blob([jsonData], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `nordic-chat-files-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export file structure:', error);
+    }
+  };
+
   const handleClearChat = () => {
-    if (window.confirm('Are you sure you want to clear all chat messages? This action cannot be undone.')) {
+    if (window.confirm('Are you sure you want to clear all chat messages and files? This action cannot be undone.')) {
       clearChatData();
+      clearMessageFiles();
       setMessages([]);
     }
   };
@@ -234,13 +259,22 @@ const ChatInterface = () => {
               title="Export chat as JSON"
             >
               <Download className="w-4 h-4" />
-              Export
+              JSON
+            </button>
+            
+            <button
+              onClick={handleExportFileStructure}
+              className="flex items-center gap-1 px-3 py-1 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+              title="Export file structure"
+            >
+              <FolderOpen className="w-4 h-4" />
+              Files
             </button>
             
             <button
               onClick={handleClearChat}
               className="flex items-center gap-1 px-3 py-1 text-sm text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Clear all messages"
+              title="Clear all messages and files"
             >
               <Trash2 className="w-4 h-4" />
               Clear
