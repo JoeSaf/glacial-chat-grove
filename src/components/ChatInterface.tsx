@@ -1,15 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Users, Shield, AlertTriangle, Ban, Download, Trash2, FolderOpen } from 'lucide-react';
+import { Send, Users, Shield, AlertTriangle, Ban, Download, Trash2, FolderOpen, Loader2 } from 'lucide-react';
 import { saveChatData, loadChatData, exportChatAsJSON, clearChatData, debugLocalStorage, ChatMessage } from '../utils/chatStorage';
 import { saveMessageToFile, exportFileStructure, clearMessageFiles, debugFileStructure } from '../utils/fileStorage';
 
-type SafetyStatus = 'safe' | 'suspicious' | 'spam';
+type SafetyStatus = 'safe' | 'suspicious' | 'spam' | 'checking';
+
+interface ScamFilterResponse {
+  prediction: boolean;
+  confidence: number;
+}
+
+interface EnhancedChatMessage extends ChatMessage {
+  safetyStatus?: SafetyStatus;
+  confidence?: number;
+  isProcessing?: boolean;
+}
 
 const ChatInterface = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<EnhancedChatMessage[]>([]);
   const [username, setUsername] = useState('');
   const [currentMessage, setCurrentMessage] = useState('');
   const [isUsernameSet, setIsUsernameSet] = useState(false);
+  const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -23,19 +35,23 @@ const ChatInterface = () => {
     const savedUsername = localStorage.getItem('chatUsername');
     
     console.log('Component mounted, loaded messages:', savedMessages);
-    setMessages(savedMessages);
+    setMessages(savedMessages.map(msg => ({ ...msg, safetyStatus: 'safe' }))); // Default to safe for loaded messages
     
     if (savedUsername) {
       setUsername(savedUsername);
       setIsUsernameSet(true);
     }
+
+    // Check API status on mount
+    checkScamFilterAPI();
   }, []);
 
   useEffect(() => {
-    // Save messages using the JSON storage utility
+    // Save messages using the JSON storage utility (only save the base ChatMessage structure)
     console.log('Messages state changed, saving to localStorage:', messages);
     if (messages.length > 0) {
-      saveChatData(messages);
+      const baseMessages: ChatMessage[] = messages.map(({ safetyStatus, confidence, isProcessing, ...baseMsg }) => baseMsg);
+      saveChatData(baseMessages);
     }
   }, [messages]);
 
@@ -43,6 +59,66 @@ const ChatInterface = () => {
     // Auto-scroll to bottom when new messages are added
     scrollToBottom();
   }, [messages]);
+
+  const checkScamFilterAPI = async () => {
+    setApiStatus('checking');
+    try {
+      const response = await fetch('/api/health', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        setApiStatus('online');
+        console.log('Scam filter API is online');
+      } else {
+        setApiStatus('offline');
+        console.warn('Scam filter API returned error:', response.status);
+      }
+    } catch (error) {
+      setApiStatus('offline');
+      console.error('Failed to connect to scam filter API:', error);
+    }
+  };
+
+  const checkMessageWithScamFilter = async (message: string): Promise<{ status: SafetyStatus; confidence: number }> => {
+    try {
+      const response = await fetch('/api/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: message }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data: ScamFilterResponse = await response.json();
+      
+      // Convert prediction to safety status
+      let status: SafetyStatus;
+      if (data.prediction) {
+        // If prediction is true (scam detected)
+        status = data.confidence > 0.8 ? 'spam' : 'suspicious';
+      } else {
+        // If prediction is false (not a scam)
+        status = 'safe';
+      }
+
+      return {
+        status,
+        confidence: data.confidence
+      };
+    } catch (error) {
+      console.error('Error checking message with scam filter:', error);
+      // Return safe as default if API fails
+      return { status: 'safe', confidence: 0.5 };
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -84,7 +160,7 @@ const ChatInterface = () => {
     }
   };
 
-  const shouldShowDateDivider = (currentMsg: ChatMessage, prevMsg: ChatMessage | null) => {
+  const shouldShowDateDivider = (currentMsg: EnhancedChatMessage, prevMsg: EnhancedChatMessage | null) => {
     if (!prevMsg) return true;
     
     const currentDate = new Date(currentMsg.timestamp).toDateString();
@@ -93,26 +169,83 @@ const ChatInterface = () => {
     return currentDate !== prevDate;
   };
 
-  const handleMessageSubmit = (e: React.FormEvent) => {
+  const handleMessageSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (currentMessage.trim() && username) {
-      const newMessage: ChatMessage = {
+      const messageText = currentMessage.trim();
+      const newMessage: EnhancedChatMessage = {
         uname: username,
         timestamp: new Date().toISOString(),
-        message: currentMessage.trim()
+        message: messageText,
+        safetyStatus: 'checking',
+        isProcessing: true,
+        confidence: 0
       };
 
       console.log('Adding new message:', newMessage);
       
-      // Save to file system in real-time
-      saveMessageToFile(newMessage);
-      
+      // Add message immediately with "checking" status
       setMessages(prev => {
         const updated = [...prev, newMessage];
         console.log('Updated messages array:', updated);
         return updated;
       });
+      
       setCurrentMessage('');
+
+      // Save to file system in real-time (without safety info initially)
+      const baseMessage: ChatMessage = {
+        uname: newMessage.uname,
+        timestamp: newMessage.timestamp,
+        message: newMessage.message
+      };
+      saveMessageToFile(baseMessage);
+
+      // Check with scam filter in background
+      if (apiStatus === 'online') {
+        try {
+          const { status, confidence } = await checkMessageWithScamFilter(messageText);
+          
+          // Update the message with safety results
+          setMessages(prev => prev.map(msg => 
+            msg.timestamp === newMessage.timestamp 
+              ? { 
+                  ...msg, 
+                  safetyStatus: status, 
+                  confidence: confidence,
+                  isProcessing: false 
+                }
+              : msg
+          ));
+          
+          console.log(`Message safety check complete: ${status} (confidence: ${confidence})`);
+        } catch (error) {
+          console.error('Failed to check message safety:', error);
+          // Mark as safe if check fails
+          setMessages(prev => prev.map(msg => 
+            msg.timestamp === newMessage.timestamp 
+              ? { 
+                  ...msg, 
+                  safetyStatus: 'safe', 
+                  confidence: 0.5,
+                  isProcessing: false 
+                }
+              : msg
+          ));
+        }
+      } else {
+        // If API is offline, mark as safe
+        setMessages(prev => prev.map(msg => 
+          msg.timestamp === newMessage.timestamp 
+            ? { 
+                ...msg, 
+                safetyStatus: 'safe', 
+                confidence: 0.5,
+                isProcessing: false 
+              }
+            : msg
+        ));
+      }
     }
   };
 
@@ -159,24 +292,6 @@ const ChatInterface = () => {
     }
   };
 
-  const getMessageSafety = (message: string): SafetyStatus => {
-    const lowerMessage = message.toLowerCase();
-    
-    // Simple spam detection
-    const spamKeywords = ['click here', 'free money', 'urgent', 'winner', 'congratulations', 'claim now'];
-    if (spamKeywords.some(keyword => lowerMessage.includes(keyword))) {
-      return 'spam';
-    }
-    
-    // Simple suspicious content detection
-    const suspiciousKeywords = ['password', 'login', 'account', 'verify', 'suspended', 'click link'];
-    if (suspiciousKeywords.some(keyword => lowerMessage.includes(keyword))) {
-      return 'suspicious';
-    }
-    
-    return 'safe';
-  };
-
   const getSafetyIcon = (status: SafetyStatus) => {
     switch (status) {
       case 'safe':
@@ -185,6 +300,8 @@ const ChatInterface = () => {
         return <AlertTriangle className="w-3 h-3" />;
       case 'spam':
         return <Ban className="w-3 h-3" />;
+      case 'checking':
+        return <Loader2 className="w-3 h-3 animate-spin" />;
     }
   };
 
@@ -196,6 +313,39 @@ const ChatInterface = () => {
         return 'text-yellow-600 bg-yellow-50 border-yellow-200';
       case 'spam':
         return 'text-red-600 bg-red-50 border-red-200';
+      case 'checking':
+        return 'text-blue-600 bg-blue-50 border-blue-200';
+    }
+  };
+
+  const getSafetyLabel = (status: SafetyStatus, confidence?: number) => {
+    const baseLabel = status.charAt(0).toUpperCase() + status.slice(1);
+    if (status === 'checking') return 'Checking...';
+    if (confidence && confidence > 0) {
+      return `${baseLabel} (${Math.round(confidence * 100)}%)`;
+    }
+    return baseLabel;
+  };
+
+  const getAPIStatusColor = () => {
+    switch (apiStatus) {
+      case 'online':
+        return 'text-green-600';
+      case 'offline':
+        return 'text-red-600';
+      case 'checking':
+        return 'text-yellow-600';
+    }
+  };
+
+  const getAPIStatusText = () => {
+    switch (apiStatus) {
+      case 'online':
+        return 'Scam Filter Online';
+      case 'offline':
+        return 'Scam Filter Offline';
+      case 'checking':
+        return 'Checking Scam Filter...';
     }
   };
 
@@ -247,12 +397,27 @@ const ChatInterface = () => {
               <Users className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-light text-slate-800">Group Chat</h1>
-              <p className="text-sm text-slate-500">Welcome, {username}</p>
+              <h1 className="text-xl font-light text-slate-800">Group Chat with Scam Protection</h1>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-slate-500">Welcome, {username}</p>
+                <span className="text-xs">•</span>
+                <span className={`text-xs ${getAPIStatusColor()}`}>
+                  {getAPIStatusText()}
+                </span>
+              </div>
             </div>
           </div>
           
           <div className="flex items-center gap-2">
+            <button
+              onClick={checkScamFilterAPI}
+              className="flex items-center gap-1 px-3 py-1 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+              title="Check scam filter status"
+            >
+              <Shield className="w-4 h-4" />
+              Check API
+            </button>
+            
             <button
               onClick={handleExportJSON}
               className="flex items-center gap-1 px-3 py-1 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
@@ -306,12 +471,12 @@ const ChatInterface = () => {
                 <Users className="w-8 h-8 text-slate-400" />
               </div>
               <p className="text-slate-500">No messages yet. Start the conversation!</p>
+              <p className="text-xs text-slate-400 mt-2">Messages will be automatically checked for scams</p>
             </div>
           ) : (
             messages.map((msg, index) => {
               const prevMsg = index > 0 ? messages[index - 1] : null;
               const showDateDivider = shouldShowDateDivider(msg, prevMsg);
-              const safetyStatus = getMessageSafety(msg.message);
               
               return (
                 <div key={index}>
@@ -339,9 +504,9 @@ const ChatInterface = () => {
                     
                     {/* Safety Indicator */}
                     <div className="ml-11">
-                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${getSafetyColor(safetyStatus)}`}>
-                        {getSafetyIcon(safetyStatus)}
-                        <span className="capitalize">{safetyStatus}</span>
+                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${getSafetyColor(msg.safetyStatus || 'safe')}`}>
+                        {getSafetyIcon(msg.safetyStatus || 'safe')}
+                        <span>{getSafetyLabel(msg.safetyStatus || 'safe', msg.confidence)}</span>
                       </div>
                     </div>
                   </div>
@@ -361,7 +526,7 @@ const ChatInterface = () => {
               type="text"
               value={currentMessage}
               onChange={(e) => setCurrentMessage(e.target.value)}
-              placeholder="Type your message..."
+              placeholder="Type your message... (will be checked for scams)"
               className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-transparent transition-all duration-200"
               maxLength={500}
               required
@@ -373,6 +538,11 @@ const ChatInterface = () => {
               <Send className="w-5 h-5" />
             </button>
           </form>
+          {apiStatus === 'offline' && (
+            <p className="text-xs text-red-500 mt-2 text-center">
+              ⚠️ Scam filter is offline. Messages will not be checked for safety.
+            </p>
+          )}
         </div>
       </div>
     </div>
