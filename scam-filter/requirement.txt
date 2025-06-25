@@ -1,1 +1,0 @@
-UUID=57fbf8a9-22fb-4111-b0bc-7162199c0e2f /mnt/gaming ext4 defaults,noatime,user,exec,rw 0 2
