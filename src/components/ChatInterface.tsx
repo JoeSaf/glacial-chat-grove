@@ -1,12 +1,13 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Users } from 'lucide-react';
+import { Send, Users, Shield, AlertTriangle, Ban } from 'lucide-react';
 
 interface ChatMessage {
   uname: string;
   timestamp: string;
   message: string;
 }
+
+type SafetyStatus = 'safe' | 'suspicious' | 'spam';
 
 const ChatInterface = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -103,6 +104,46 @@ const ChatInterface = () => {
     return currentDate !== prevDate;
   };
 
+  const getMessageSafety = (message: string): SafetyStatus => {
+    const lowerMessage = message.toLowerCase();
+    
+    // Simple spam detection
+    const spamKeywords = ['click here', 'free money', 'urgent', 'winner', 'congratulations', 'claim now'];
+    if (spamKeywords.some(keyword => lowerMessage.includes(keyword))) {
+      return 'spam';
+    }
+    
+    // Simple suspicious content detection
+    const suspiciousKeywords = ['password', 'login', 'account', 'verify', 'suspended', 'click link'];
+    if (suspiciousKeywords.some(keyword => lowerMessage.includes(keyword))) {
+      return 'suspicious';
+    }
+    
+    return 'safe';
+  };
+
+  const getSafetyIcon = (status: SafetyStatus) => {
+    switch (status) {
+      case 'safe':
+        return <Shield className="w-3 h-3" />;
+      case 'suspicious':
+        return <AlertTriangle className="w-3 h-3" />;
+      case 'spam':
+        return <Ban className="w-3 h-3" />;
+    }
+  };
+
+  const getSafetyColor = (status: SafetyStatus) => {
+    switch (status) {
+      case 'safe':
+        return 'text-green-600 bg-green-50 border-green-200';
+      case 'suspicious':
+        return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'spam':
+        return 'text-red-600 bg-red-50 border-red-200';
+    }
+  };
+
   if (!isUsernameSet) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center p-4">
@@ -186,6 +227,7 @@ const ChatInterface = () => {
             messages.map((msg, index) => {
               const prevMsg = index > 0 ? messages[index - 1] : null;
               const showDateDivider = shouldShowDateDivider(msg, prevMsg);
+              const safetyStatus = getMessageSafety(msg.message);
               
               return (
                 <div key={index}>
@@ -209,7 +251,15 @@ const ChatInterface = () => {
                       <span className="font-medium text-slate-800">{msg.uname}</span>
                       <span className="text-xs text-slate-500">{formatTime(msg.timestamp)}</span>
                     </div>
-                    <p className="text-slate-700 leading-relaxed ml-11">{msg.message}</p>
+                    <p className="text-slate-700 leading-relaxed ml-11 mb-3">{msg.message}</p>
+                    
+                    {/* Safety Indicator */}
+                    <div className="ml-11">
+                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${getSafetyColor(safetyStatus)}`}>
+                        {getSafetyIcon(safetyStatus)}
+                        <span className="capitalize">{safetyStatus}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
