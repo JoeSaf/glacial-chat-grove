@@ -1,73 +1,33 @@
-# Welcome to your Lovable project
+# Fast Guide to get started
+- to run the scam filter chat web
+- first setup the npm weights
 
-## Project info
-
-**URL**: https://lovable.dev/projects/3c468116-589f-49d4-8fe8-e0b9a53b4df4
-
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/3c468116-589f-49d4-8fe8-e0b9a53b4df4) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
+```
 npm i
+```
+- then run the project 
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+- to start the scam filter api 
+- first install the requirements
+ 
+```
+python -m venv scam-filter
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+source scam-filter/bin/activate.fsh
 
-**Use GitHub Codespaces**
+cd scam-filter/
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+pip install -r requirements.txt
 
-## What technologies are used for this project?
 
-This project is built with:
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- then start the api
+```
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/3c468116-589f-49d4-8fe8-e0b9a53b4df4) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+python -m uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+```
