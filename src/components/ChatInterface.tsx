@@ -1,11 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Users, Shield, AlertTriangle, Ban } from 'lucide-react';
-
-interface ChatMessage {
-  uname: string;
-  timestamp: string;
-  message: string;
-}
+import { Send, Users, Shield, AlertTriangle, Ban, Download, Trash2 } from 'lucide-react';
+import { saveChatData, loadChatData, exportChatAsJSON, clearChatData, ChatMessage } from '../utils/chatStorage';
 
 type SafetyStatus = 'safe' | 'suspicious' | 'spam';
 
@@ -18,13 +13,11 @@ const ChatInterface = () => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load messages from localStorage on component mount
-    const savedMessages = localStorage.getItem('chatMessages');
+    // Load messages using the new JSON storage utility
+    const savedMessages = loadChatData();
     const savedUsername = localStorage.getItem('chatUsername');
     
-    if (savedMessages) {
-      setMessages(JSON.parse(savedMessages));
-    }
+    setMessages(savedMessages);
     
     if (savedUsername) {
       setUsername(savedUsername);
@@ -33,8 +26,10 @@ const ChatInterface = () => {
   }, []);
 
   useEffect(() => {
-    // Save messages to localStorage whenever messages change
-    localStorage.setItem('chatMessages', JSON.stringify(messages));
+    // Save messages using the new JSON storage utility
+    if (messages.length > 0) {
+      saveChatData(messages);
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -51,20 +46,6 @@ const ChatInterface = () => {
     if (username.trim()) {
       setIsUsernameSet(true);
       localStorage.setItem('chatUsername', username);
-    }
-  };
-
-  const handleMessageSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (currentMessage.trim() && username) {
-      const newMessage: ChatMessage = {
-        uname: username,
-        timestamp: new Date().toISOString(),
-        message: currentMessage.trim()
-      };
-
-      setMessages(prev => [...prev, newMessage]);
-      setCurrentMessage('');
     }
   };
 
@@ -102,6 +83,44 @@ const ChatInterface = () => {
     const prevDate = new Date(prevMsg.timestamp).toDateString();
     
     return currentDate !== prevDate;
+  };
+
+  const handleMessageSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentMessage.trim() && username) {
+      const newMessage: ChatMessage = {
+        uname: username,
+        timestamp: new Date().toISOString(),
+        message: currentMessage.trim()
+      };
+
+      setMessages(prev => [...prev, newMessage]);
+      setCurrentMessage('');
+    }
+  };
+
+  const handleExportJSON = () => {
+    try {
+      const jsonData = exportChatAsJSON();
+      const blob = new Blob([jsonData], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `nordic-chat-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export chat data:', error);
+    }
+  };
+
+  const handleClearChat = () => {
+    if (window.confirm('Are you sure you want to clear all chat messages? This action cannot be undone.')) {
+      clearChatData();
+      setMessages([]);
+    }
   };
 
   const getMessageSafety = (message: string): SafetyStatus => {
@@ -197,16 +216,36 @@ const ChatInterface = () => {
             </div>
           </div>
           
-          <button
-            onClick={() => {
-              setIsUsernameSet(false);
-              setUsername('');
-              localStorage.removeItem('chatUsername');
-            }}
-            className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
-          >
-            Change Name
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportJSON}
+              className="flex items-center gap-1 px-3 py-1 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+              title="Export chat as JSON"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+            
+            <button
+              onClick={handleClearChat}
+              className="flex items-center gap-1 px-3 py-1 text-sm text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Clear all messages"
+            >
+              <Trash2 className="w-4 h-4" />
+              Clear
+            </button>
+            
+            <button
+              onClick={() => {
+                setIsUsernameSet(false);
+                setUsername('');
+                localStorage.removeItem('chatUsername');
+              }}
+              className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              Change Name
+            </button>
+          </div>
         </div>
       </header>
 
